@@ -1,8 +1,4 @@
-/build
-/dist
-/nbproject/private
-/nbproject/pmd.settings
-/nbproject/findbugs.settings
-/lib/craftbukkit.jar
-/lib/SpoutAPI.jar
-/lib/SpoutPlugin.jar
+.settings
+build
+bin
+dist
