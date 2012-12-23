@@ -1,224 +1,209 @@
 package com.wimbli.TexturePackMenu;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.logging.Level;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.getspout.spoutapi.SpoutManager;
 import org.getspout.spoutapi.io.CRCStore;
 import org.getspout.spoutapi.player.SpoutPlayer;
-import org.yaml.snakeyaml.DumperOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.reader.UnicodeReader;
 
 public class Config {
-	// private stuff used within this class
+
 	private static TexturePackMenu plugin;
-	private static Yaml yaml;
-	private static File configFile;
 	private static File playerFile;
+	private static YamlConfiguration playerConfig;
+	private static final String PLAYER_FILE_NAME = "players.yml";
+	private static final String PLAYER_CONFIG_SECTION = "PlayerTextures";
 
 	private static Map<String, String> texturePacks = new LinkedHashMap<String, String>(); // (Pack Name, URL)
 	private static Map<String, String> playerPacks = new HashMap<String, String>(); // (Player Name, Pack Name)
 
-	private static byte[] crcBuffer = new byte[16384];
+	private static final byte[] CRC_BUFFER = new byte[16384];
 
 	// load config
-	public static void load(TexturePackMenu master) {
+	public static void load(final TexturePackMenu master) {
 		plugin = master;
-		configFile = new File(plugin.getDataFolder(), "config.yml");
-		playerFile = new File(plugin.getDataFolder(), "players.yml");
-
-		// make our yml output more easily human readable, instead of compact and ugly
-		DumperOptions options = new DumperOptions();
-		options.setPrettyFlow(true);
-		options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-		options.setDefaultScalarStyle(DumperOptions.ScalarStyle.DOUBLE_QUOTED);
-		yaml = new Yaml(options);
-
+		playerConfig = getPlayerCofig();
 		loadTexturePackList();
 		loadPlayerPacks();
 	}
 
-	public static String[] texPackNames() {
-		return texturePacks.keySet().toArray(new String[0]);
+	private static YamlConfiguration getPlayerCofig() {
+		playerFile = new File(plugin.getDataFolder(), PLAYER_FILE_NAME);
+		if (!playerFile.getParentFile().exists() || !playerFile.exists()) {
+			try {
+				plugin.log("Creating: " + playerFile.getPath());
+				playerFile.createNewFile();
+			} catch (IOException e) {
+				plugin.log(Level.WARNING, "Error creating: " + playerFile.getPath());
+			}
+		}
+		return YamlConfiguration.loadConfiguration(playerFile);
 	}
 
-	public static String[] texPackURLs() {
-		return texturePacks.values().toArray(new String[0]);
+	public static List<String> texPackNames() {
+		return new ArrayList<String>(texturePacks.keySet());
+	}
+
+	public static List<String> texPackURLs() {
+		return new ArrayList<String>(texturePacks.values());
 	}
 
 	public static int texturePackCount() {
 		return texturePacks.size();
 	}
 
-	public static String getPack(String playerName) {
-		if (!playerPacks.containsKey(playerName.toLowerCase()))
+	public static String getPack(final String playerName) {
+		if (!playerPacks.containsKey(playerName.toLowerCase())) {
 			return "";
+		}
 
 		return playerPacks.get(playerName.toLowerCase());
 	}
 
-	public static void setPack(SpoutPlayer sPlayer, String packName) {
+	public static void setPack(SpoutPlayer sPlayer, final String packName) {
 		if (!texturePacks.containsKey(packName)) {
 			setPack(sPlayer, 0);
-			if (sPlayer.hasPermission("texturepackmenu.texture"))
+			if (sPlayer.hasPermission("texturepackmenu.texture")) {
 				sPlayer.sendNotification("Texture packs available", "Use command: " + ChatColor.AQUA + "/texture",
-						Material.PAPER, (short) 0, 10000);
-		} else
+						new ItemStack(Material.PAPER), 10000);
+			}
+		} else {
 			setPlayerTexturePack(sPlayer, packName);
+		}
 	}
 
 	public static void setPack(SpoutPlayer sPlayer, int index) {
-		if (texturePacks.size() < index - 1)
+		if (texturePacks.size() < index - 1) {
 			index = 0;
-		setPlayerTexturePack(sPlayer, texPackNames()[index]);
+		}
+		setPlayerTexturePack(sPlayer, texPackNames().get(index));
 	}
 
 	public static void setPackDelayed(final SpoutPlayer sPlayer, final String packName) {
-		plugin.getServer().getScheduler().scheduleAsyncDelayedTask(plugin, new Runnable() {
+		plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, new Runnable() {
 			public void run() {
 				setPlayerTexturePack(sPlayer, packName);
 			}
-		}, 10);
+		}, 2);
 	}
 
 	public static void setPackDelayed(SpoutPlayer sPlayer, int index) {
-		if (texturePacks.size() < index - 1)
+		if (texturePacks.size() < index - 1) {
 			index = 0;
-		setPackDelayed(sPlayer, texPackNames()[index]);
+		}
+		setPackDelayed(sPlayer, texPackNames().get(index));
 	}
 
 	private static void setPlayerTexturePack(SpoutPlayer sPlayer, String packName) {
-		if (sPlayer == null || !sPlayer.isOnline())
+		if (sPlayer == null || !sPlayer.isOnline()) {
 			return;
+		}
 
+		if (!isValidPackName(packName)) {
+			// Get default name
+			packName = texPackNames().get(0);
+		}
 		String packURL = texturePacks.get(packName);
 
-		sPlayer.sendNotification("Texture pack selected:", packName, Material.PAINTING);
-		storePlayerTexturePack(sPlayer.getName(), packName);
-
-		if (packURL == null || packURL.isEmpty())
+		// IF URL is empty after getting default, then it's the players choice
+		// Let them know others are available if they have the permissions.
+		if (packURL == null || packURL.trim().isEmpty()) {
 			sPlayer.resetTexturePack();
-		else {
+			if (sPlayer.hasPermission("texturepackmenu.texture")) {
+				sPlayer.sendNotification("Texture packs available", "Use command: " + ChatColor.AQUA + "/texture",
+						new ItemStack(Material.PAPER), 10000);
+			}
+		} else {
+			sPlayer.sendNotification(
+					plugin.getConfig().getString("settings.notification.title", "Loading texture pack..."), packName,
+					new ItemStack(Material.PAINTING), plugin.getConfig().getInt("settings.notification.delay", 10000));
+			storePlayerTexturePack(sPlayer.getName(), packName);
+
 			sPlayer.setTexturePack(packURL);
 
 			// make sure it checks out as valid, by getting CRC value for it
 			Long crc = null;
-			crc = CRCStore.getCRC(packURL, crcBuffer);
-			if (crc == null || crc == 0)
+			crc = CRCStore.getCRC(packURL, CRC_BUFFER);
+			if (crc == null || crc == 0) {
 				plugin.logWarn("Bad CRC value for texture pack. It is probably an invalid URL: " + packURL);
+			}
 		}
 	}
 
-	public static void storePlayerTexturePack(String playerName, String packName) {
+	private static boolean isValidPackName(String packName) {
+		if (packName == null || packName.isEmpty()) {
+			return false;
+		}
+		if (texPackNames().contains(packName)) {
+			return true;
+		}
+		return false;
+	}
+
+	public static void storePlayerTexturePack(final String playerName, final String packName) {
 		playerPacks.put(playerName.toLowerCase(), packName);
 	}
 
-	public static void resetPlayerTexturePack(String playerName) {
+	public static void resetPlayerTexturePack(final String playerName) {
 		playerPacks.remove(playerName.toLowerCase());
 
 		Player player = plugin.getServer().getPlayer(playerName);
 		if (player != null) {
 			SpoutPlayer sPlayer = SpoutManager.getPlayer(player);
-			if (sPlayer != null && sPlayer.isSpoutCraftEnabled())
+			if (sPlayer != null && sPlayer.isSpoutCraftEnabled()) {
 				setPack(sPlayer, 0);
+			}
 		}
 	}
 
 	public static void loadTexturePackList() {
-		try {
-			FileInputStream in = new FileInputStream(configFile);
-			texturePacks = (Map<String, String>) yaml.load(new UnicodeReader(in));
-		} catch (FileNotFoundException e) {
+		int packCount = 0;
+		for (Entry<String, Object> entry : plugin.getConfig().getConfigurationSection("TexturePacks").getValues(false)
+				.entrySet()) {
+			texturePacks.put(entry.getKey(), entry.getValue().toString());
+			packCount++;
 		}
-
-		if (texturePacks == null || texturePacks.isEmpty())
-			useDefaults();
+		plugin.log("Found " + packCount + " configured texture packs.");
 	}
 
 	// load player data
 	private static void loadPlayerPacks() {
-		if (!playerFile.getParentFile().exists() || !playerFile.exists())
+		if (!playerFile.getParentFile().exists() || !playerFile.exists()) {
+			plugin.log("Error locating " + PLAYER_FILE_NAME);
 			return;
-
-		try {
-			FileInputStream in = new FileInputStream(playerFile);
-			playerPacks = (Map<String, String>) yaml.load(new UnicodeReader(in));
-		} catch (FileNotFoundException e) {
+		}
+		ConfigurationSection section = playerConfig.getConfigurationSection(PLAYER_CONFIG_SECTION);
+		if (section != null && !section.getValues(false).isEmpty()) {
+			for (Entry<String, Object> entry : section.getValues(false).entrySet()) {
+				playerPacks.put(entry.getKey(), (String) entry.getValue());
+			}
 		}
 	}
 
 	// save player data
 	public static void savePlayerPacks() {
-		if (!playerFile.getParentFile().exists())
+		if (!playerFile.getParentFile().exists()) {
 			return;
-
-		try {
-			BufferedWriter out = new BufferedWriter(new FileWriter(playerFile, false));
-			out.write(yaml.dump(playerPacks));
-			out.close();
-		} catch (IOException e) {
-			plugin.logWarn("ERROR SAVING PLAYER DATA: " + e.getLocalizedMessage());
 		}
-	}
-
-	// set default values, and save new config file
-	private static void useDefaults() {
-		plugin.logConfig("Configuration not present, creating new default config.yml file. YOU WILL NEED TO EDIT IT MANUALLY.");
-
-		texturePacks = new LinkedHashMap<String, String>();
-		texturePacks.put("Player Choice", "");
-		texturePacks.put("Minecraft Default",
-				"https://github.com/Brettflan/TexturePackMenu/raw/master/packs/default.zip");
-		texturePacks.put("Default Pack Copy",
-				"https://github.com/Brettflan/TexturePackMenu/raw/master/packs/default.zip");
-
-		if (!configFile.getParentFile().exists()) {
-			if (!configFile.getParentFile().mkdirs()) {
-				plugin.logWarn("FAILED TO CREATE PLUGIN FOLDER.");
-				return;
-			}
-		}
-
-		String newLine = System.getProperty("line.separator");
-
+		playerConfig.createSection(PLAYER_CONFIG_SECTION, playerPacks);
 		try {
-			BufferedWriter out = new BufferedWriter(new FileWriter(configFile, false));
-			out.write("# Below is a default config which you will need to update to contain your own texture pack choices. You will need to restart your server after making changes."
-					+ newLine);
-			out.write("# Each entry consists of the displayed name of the texture pack, followed by the download URL that will be used. There is no limit to the number of entries."
-					+ newLine);
-			out.write("# Texture pack names must be limited to 26 characters long at most. Longer ones will cause errors."
-					+ newLine);
-			out.write("# The first entry will always be the default, which players new to the server will be set to."
-					+ newLine);
-			out.write("# Be sure to test each one you add to make sure it works. An invalid URL will cause an error, and an URL which fails will make that entry do nothing."
-					+ newLine);
-			out.write("# If a texture pack fails to load properly, try changing the URL filename. In particular, try replacing spaces (\" \") and other special characters with underscores (\"_\")."
-					+ newLine);
-			out.write("# If you do want to allow players to use their own texture pack, you can leave a blank URL as seen below for \"Player Choice\"."
-					+ newLine);
-			out.write("# Note that if you want to use quotation marks (\") in texture pack names, you will need to add them with a backslash like so to prevent parsing errors: \\\""
-					+ newLine);
-			out.write("#     example: \"The \\\"Silly\\\" Pack\": \"http://fake-server.net/sillypack.zip\"" + newLine);
-			out.write("#     would display as:    The \"Silly\" Pack" + newLine);
-			out.write("#" + newLine);
-			out.write("# For more information, head here: http://dev.bukkit.org/server-mods/texturepackmenu/" + newLine);
-			out.write(newLine);
-			out.write(yaml.dump(texturePacks));
-			out.close();
+			playerConfig.save(playerFile);
 		} catch (IOException e) {
-			plugin.logWarn("ERROR SAVING DEFAULT CONFIG: " + e.getLocalizedMessage());
+			plugin.logWarn("Error saving: " + playerFile.getPath());
 		}
 	}
 }

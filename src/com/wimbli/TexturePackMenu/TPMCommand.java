@@ -43,9 +43,10 @@ public class TPMCommand implements CommandExecutor {
 			Config.resetPlayerTexturePack(playerName);
 			sender.sendMessage("The player \"" + playerName
 					+ "\" is now reset back to the default texture pack. They did have \"" + packName + "\" chosen.");
-			if (sender instanceof Player)
+			if (sender instanceof Player) {
 				plugin.log("The player \"" + sender.getName() + "\" has reset \"" + playerName
 						+ "\" back to the default texture pack. They did have \"" + packName + "\" chosen.");
+			}
 
 			return true;
 		}

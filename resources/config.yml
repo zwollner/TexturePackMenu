@@ -1,0 +1,19 @@
+# Below is a default config which you will need to update to contain your own texture pack choices. You will need to restart your server after making changes.
+# Each entry consists of the displayed name of the texture pack, followed by the download URL that will be used. There is no limit to the number of entries.
+# Texture pack names must be limited to 26 characters long at most. Longer ones will cause errors.
+# The first entry will always be the default, which players new to the server will be set to.
+# Be sure to test each one you add to make sure it works. An invalid URL will cause an error, and an URL which fails will make that entry do nothing.
+# If a texture pack fails to load properly, try changing the URL filename, you may need to put it within single quotes.
+# If you do want to allow players to use their own texture pack, you can leave a blank URL as seen below for "Player Choice".
+#
+# notification message is always the name of the pack
+# delay is in milliseconds
+
+settings:
+    notification:
+        title: 'Loading texture pack...'
+        delay: 10000
+
+TexturePacks:
+    Player Choice: ' '
+    Minecraft Default: http://www.planetminecraft.com/files/resource_media/texture/BETTER-DEFAULT.zip

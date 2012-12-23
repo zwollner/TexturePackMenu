@@ -6,17 +6,14 @@ import org.bukkit.event.Listener;
 import org.getspout.spoutapi.event.spout.SpoutCraftEnableEvent;
 import org.getspout.spoutapi.player.SpoutPlayer;
 
-
-public class TPMListener implements Listener
-{
+public class TPMListener implements Listener {
 	@EventHandler(priority = EventPriority.NORMAL)
-	public void onSpoutCraftEnable(SpoutCraftEnableEvent event)
-	{
+	public void onSpoutCraftEnable(SpoutCraftEnableEvent event) {
 		SpoutPlayer sPlayer = event.getPlayer();
-		if (sPlayer == null)
+		if (sPlayer == null) {
 			return;
+		}
 
-		String texPack = Config.getPack(sPlayer.getName());
-		Config.setPackDelayed(sPlayer, texPack);
+		Config.setPackDelayed(sPlayer, Config.getPack(sPlayer.getName()));
 	}
 }
